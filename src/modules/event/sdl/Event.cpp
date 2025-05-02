@@ -125,6 +125,7 @@ Event::~Event()
 
 void Event::pump(float waitTimeout)
 {
+	return;
 	exceptionIfInRenderPass("love.event.pump");
 
 	bool shouldPoll = false;

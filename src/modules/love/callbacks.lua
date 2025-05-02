@@ -172,7 +172,7 @@ function love.run()
 	return function()
 		-- Process events.
 		if love.event then
-			love.event.pump()
+			-- love.event.pump()
 			for name, a,b,c,d,e,f,g,h in love.event.poll() do
 				if name == "quit" then
 					if not love.quit or not love.quit() then

@@ -21,12 +21,15 @@
 #include "common/version.h"
 #include "common/runtime.h"
 #include "common/Variant.h"
+#include "common/Object.h"
 #include "modules/love/love.h"
+#include "modules/event/Event.h"
 
 #include <SDL3/SDL.h>
 
 #ifdef LOVE_BUILD_EXE
 
+#define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
 
 // Lua
@@ -144,12 +147,6 @@ static int love_preload(lua_State *L, lua_CFunction f, const char *name)
 	return 0;
 }
 
-enum DoneAction
-{
-	DONE_QUIT,
-	DONE_RESTART,
-};
-
 static void print_usage()
 {
     // when editing this message, change it at boot.lua too
@@ -165,8 +162,23 @@ static void print_usage()
         );
 }
 
-static DoneAction runlove(int argc, char **argv, int &retval, love::Variant &restartvalue)
+struct app_globals {
+	lua_State *L;
+	int stackpos;
+};
+
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv)
 {
+	if (strcmp(LOVE_VERSION_STRING, love_version()) != 0)
+	{
+		printf("Version mismatch detected!\nLOVE binary is version %s\n"
+			   "LOVE library is version %s\n", LOVE_VERSION_STRING, love_version());
+		return SDL_APP_FAILURE;
+	}
+
+	love::Variant restartvalue;
+	
+
 	// Oh, you just want the version? Okay!
 	if (argc > 1 && strcmp(argv[1], "--version") == 0)
 	{
@@ -175,19 +187,20 @@ static DoneAction runlove(int argc, char **argv, int &retval, love::Variant &res
 		love_openConsole(err);
 #endif
 		printf("LOVE %s (%s)\n", love_version(), love_codename());
-		retval = 0;
-		return DONE_QUIT;
+		return SDL_APP_SUCCESS;
 	}
 
 	if (argc > 1 && strcmp(argv[1], "--help") == 0)
 	{
 		print_usage();
-		retval = 0;
-		return DONE_QUIT;
+		return SDL_APP_SUCCESS;
 	}
+
+	struct app_globals *g = (struct app_globals *) malloc(sizeof(struct app_globals));
 
 	// Create the virtual machine.
 	lua_State *L = luaL_newstate();
+	g->L = L;
 	luaL_openlibs(L);
 
 	// LuaJIT-specific setup needs to be done as early as possible - before
@@ -260,37 +273,10 @@ static DoneAction runlove(int argc, char **argv, int &retval, love::Variant &res
 	// Turn the returned boot function into a coroutine and call it until done.
 	lua_newthread(L);
 	lua_pushvalue(L, -2);
-	int stackpos = lua_gettop(L);
-	int nres;
-	while (love::luax_resume(L, 0, &nres) == LUA_YIELD)
-#if LUA_VERSION_NUM >= 504
-		lua_pop(L, nres);
-#else
-		lua_pop(L, lua_gettop(L) - stackpos);
-#endif
 
-	retval = 0;
-	DoneAction done = DONE_QUIT;
+	g->stackpos = lua_gettop(g->L);
 
-	// if love.boot() returns "restart", we'll start up again after closing this
-	// Lua state.
-	int retidx = stackpos;
-	if (!lua_isnoneornil(L, retidx))
-	{
-		if (lua_type(L, retidx) == LUA_TSTRING && strcmp(lua_tostring(L, retidx), "restart") == 0)
-			done = DONE_RESTART;
-		if (lua_isnumber(L, retidx))
-			retval = (int) lua_tonumber(L, retidx);
-
-		// Disallow userdata (love objects) from being referenced by the restart
-		// value.
-		if (retidx < lua_gettop(L))
-			restartvalue = love::luax_checkvariant(L, retidx + 1, false);
-	}
-
-	lua_close(L);
-
-#if defined(LOVE_LEGENDARY_APP_ARGV_HACK) && !defined(LOVE_IOS)
+	#if defined(LOVE_LEGENDARY_APP_ARGV_HACK) && !defined(LOVE_IOS)
 	if (hack_argv)
 	{
 		for (int i = 0; i<hack_argc; ++i)
@@ -299,39 +285,36 @@ static DoneAction runlove(int argc, char **argv, int &retval, love::Variant &res
 	}
 #endif // LOVE_LEGENDARY_APP_ARGV_HACK
 
-	return done;
+	*appstate = g;
+	return SDL_APP_CONTINUE;
 }
 
-int main(int argc, char **argv)
+SDL_AppResult SDL_AppIterate(void *appstate)
 {
-	if (strcmp(LOVE_VERSION_STRING, love_version()) != 0)
+	struct app_globals *g = (struct app_globals *) appstate;
+	int nres;
+	if(love::luax_resume(g->L, 0, &nres) == LUA_YIELD)
 	{
-		printf("Version mismatch detected!\nLOVE binary is version %s\n"
-			   "LOVE library is version %s\n", LOVE_VERSION_STRING, love_version());
-		return 1;
+#if LUA_VERSION_NUM >= 504
+		lua_pop(g->L, nres);
+#else
+		lua_pop(g->L, lua_gettop(g->L) - g->stackpos);
+#endif
+		return SDL_APP_CONTINUE;
 	}
+	return SDL_APP_SUCCESS;
+}
 
-	int retval = 0;
-	DoneAction done = DONE_QUIT;
-	love::Variant restartvalue;
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
+{
 
-	do
-	{
-		done = runlove(argc, argv, retval, restartvalue);
+}
 
-#ifdef LOVE_IOS
-		// on iOS we should never programmatically exit the app, so we'll just
-		// "restart" when that is attempted. Games which use threads might cause
-		// some issues if the threads aren't cleaned up properly...
-		done = DONE_RESTART;
-#endif
-	} while (done != DONE_QUIT);
-
-#ifdef LOVE_ANDROID
-	SDL_Quit();
-#endif
-
-	return retval;
+void SDL_AppQuit(void *appstate, SDL_AppResult result)
+{
+	struct app_globals *g = (struct app_globals *) appstate;
+	lua_close(g->L);
+	free(g);
 }
 
 #endif // LOVE_BUILD_EXE
