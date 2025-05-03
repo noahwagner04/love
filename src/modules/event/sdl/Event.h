@@ -62,6 +62,8 @@ public:
 	 */
 	void clear() override;
 
+	void pushSDLEvent(const SDL_Event &e);
+
 private:
 
 	void exceptionIfInRenderPass(const char *name);

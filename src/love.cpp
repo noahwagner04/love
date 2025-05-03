@@ -17,13 +17,12 @@
  *    misrepresented as being the original software.
  * 3. This notice may not be removed or altered from any source distribution.
  **/
-
 #include "common/version.h"
 #include "common/runtime.h"
 #include "common/Variant.h"
-#include "common/Object.h"
 #include "modules/love/love.h"
 #include "modules/event/Event.h"
+#include "modules/event/sdl/Event.h"
 
 #include <SDL3/SDL.h>
 
@@ -307,7 +306,13 @@ SDL_AppResult SDL_AppIterate(void *appstate)
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 {
+	auto event_mod = love::Module::getInstance<love::event::sdl::Event>(love::Module::M_EVENT);
+	
+	if (event_mod == nullptr)
+		return SDL_APP_CONTINUE;
 
+	event_mod->pushSDLEvent(*event);
+	return SDL_APP_CONTINUE;
 }
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result)

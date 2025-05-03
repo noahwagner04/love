@@ -125,7 +125,6 @@ Event::~Event()
 
 void Event::pump(float waitTimeout)
 {
-	return;
 	exceptionIfInRenderPass("love.event.pump");
 
 	bool shouldPoll = false;
@@ -207,6 +206,13 @@ void Event::clear()
 	}
 
 	love::event::Event::clear();
+}
+
+void Event::pushSDLEvent(const SDL_Event &e)
+{
+	StrongRef<Message> msg(convert(e), Acquire::NORETAIN);
+	if (msg)
+		push(msg);
 }
 
 void Event::exceptionIfInRenderPass(const char *name)
