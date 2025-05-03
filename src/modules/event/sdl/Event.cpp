@@ -97,10 +97,10 @@ static bool SDLCALL watchAppEvents(void *udata, SDL_Event *event)
 				gfx->setActive(event->type == SDL_EVENT_WILL_ENTER_FOREGROUND);
 		}
 		break;
-	case SDL_EVENT_WINDOW_EXPOSED:
-		if (eventModule != nullptr && SDL_IsMainThread())
-			eventModule->modalDraw();
-		break;
+	// case SDL_EVENT_WINDOW_EXPOSED:
+	// 	if (eventModule != nullptr && SDL_IsMainThread())
+	// 		eventModule->modalDraw();
+	// 	break;
 	default:
 		break;
 	}
