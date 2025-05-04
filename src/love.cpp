@@ -176,7 +176,9 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv)
 	}
 
 	love::Variant restartvalue;
-	
+
+	char *hint_value = "0";
+	SDL_SetHint(SDL_HINT_MAIN_CALLBACK_RATE, hint_value);
 
 	// Oh, you just want the version? Okay!
 	if (argc > 1 && strcmp(argv[1], "--version") == 0)
